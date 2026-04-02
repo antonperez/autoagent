@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[oc]
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets
+.env
+.credentials.json
+
+# Runtime artifacts
+results.tsv
+run.log
+jobs/
+tasks/
+tasks-archived/
+tasks-archived-sheets/
+tasks-sheets-verified/
+tasks-sheets/
+
+dev/

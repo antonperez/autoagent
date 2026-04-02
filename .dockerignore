@@ -1,0 +1,12 @@
+.venv
+.env
+.git
+run.log
+results.tsv
+jobs/
+docs/
+tasks/
+__pycache__
+*.py[oc]
+uv.lock
+.python-version
