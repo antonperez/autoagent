@@ -1,0 +1,79 @@
+{
+  "version": "1.0.0",
+  "project": "autoagent",
+  "strategy": "unified",
+  "rationale": "Small codebase (2 main Python files, no modules). Most tasks are single-file edits in the harness editable section. Unified strategy (symbol discovery + direct implementation) is appropriate.",
+
+  "memory_loading": {
+    "always_load": [
+      "architecture.md",
+      "codebase-conventions.md"
+    ],
+    "load_when_running_benchmarks": [
+      "testing-strategy.md",
+      "docker-workflow.md"
+    ],
+    "load_when_touching_docker": [
+      "docker-workflow.md"
+    ]
+  },
+
+  "symbol_first": {
+    "enabled": true,
+    "priority_files": [
+      "agent.py",
+      "agent-claude.py"
+    ],
+    "skip_symbol_first_for": [
+      "pyproject.toml",
+      "Dockerfile.base",
+      ".env",
+      "program.md",
+      "results.tsv",
+      "run.log"
+    ]
+  },
+
+  "caching": {
+    "cache_on_first_load": [
+      ".claude/CLAUDE.md",
+      ".serena/memories/architecture.md",
+      ".serena/memories/codebase-conventions.md",
+      ".claude/settings/constitution.json"
+    ],
+    "estimated_cache_hit_rate": "80-90%",
+    "notes": "Small project — memories fit easily in cache. Constitution and CLAUDE.md are loaded every session."
+  },
+
+  "model_selection": {
+    "default": "sonnet",
+    "use_haiku_for": [
+      "task decomposition",
+      "simple formatting",
+      "reading results.tsv",
+      "listing files"
+    ],
+    "use_opus_for": [
+      "architectural decisions affecting constitution",
+      "security review of API key handling"
+    ],
+    "target_distribution": {
+      "haiku": "30%",
+      "sonnet": "65%",
+      "opus": "5%"
+    }
+  },
+
+  "expected_savings": {
+    "per_session_token_reduction": "60-70%",
+    "with_prompt_caching": "75-85%",
+    "code_exploration": "70-80% (2 files, each ~250 lines — reading full files is still cheap, but symbol-first is faster)"
+  },
+
+  "notes": [
+    "This is a very small project. The main cost driver will be long benchmark run.log files and trajectory.json files from jobs/.",
+    "Avoid reading trajectory.json files unless diagnosing a specific failure — they can be large.",
+    "Use Grep to search run.log for specific task names rather than reading the full log.",
+    "The FIXED ADAPTER section of agent.py is irrelevant to most edits — use symbol-first to skip it."
+  ]
+}

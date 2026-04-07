@@ -1,0 +1,139 @@
+{
+  "version": "1.0.0",
+  "project": "autoagent",
+  "description": "Architectural decision framework for the AutoAgent meta-agent harness engineering system",
+
+  "principles": {
+    "fixed_adapter_immutability": {
+      "priority": "critical",
+      "description": "The FIXED ADAPTER section in agent.py and agent-claude.py must not be modified without explicit human instruction. It contains the Harbor integration boundary, ATIF serialization, and the AutoAgent(BaseAgent) class.",
+      "rules": [
+        "Never modify code below the FIXED ADAPTER BOUNDARY comment",
+        "Never modify the AutoAgent class structure, SUPPORTS_ATIF flag, or trajectory serialization",
+        "Never change the Harbor adapter's run() method signature or behavior",
+        "If the human asks for adapter changes, confirm explicitly before proceeding"
+      ],
+      "enforcement": "automatic",
+      "violations": "reject_change"
+    },
+    "single_file_harness": {
+      "priority": "critical",
+      "description": "Each harness is intentionally a single file. Do not split into modules. Simplicity is a first-class design goal.",
+      "rules": [
+        "Keep all harness code in agent.py (or agent-claude.py) — no helper modules",
+        "Do not create separate files for tools, agents, or utilities",
+        "If a helper is needed, add it as an inner function or module-level function in the same file"
+      ],
+      "enforcement": "automatic",
+      "violations": "warn_and_suggest_fix"
+    },
+    "no_overfitting": {
+      "priority": "critical",
+      "description": "Harness improvements must be general, not task-specific. Benchmark-specific keyword rules and hardcoded solutions are forbidden.",
+      "rules": [
+        "Apply the overfitting test: 'If this exact task disappeared, would this still be a worthwhile improvement?'",
+        "Do not add task-specific conditions, keyword matching, or hardcoded solutions",
+        "Do not add benchmark-specific heuristics that only help on known task types",
+        "Prefer fixing a class of failures, not a single failing task"
+      ],
+      "enforcement": "automatic",
+      "violations": "reject_change"
+    },
+    "simplicity_wins": {
+      "priority": "high",
+      "description": "All else being equal, simpler is better. If a change achieves the same 'passed' result with a simpler harness, keep it. Complexity that does not improve scores must be removed.",
+      "rules": [
+        "Do not add components, logic, or prompts that do not improve pass rate",
+        "When two approaches achieve the same score, always choose the simpler one",
+        "Remove special-case handling that does not demonstrably help",
+        "Prefer fewer tools over more tools when the simpler set performs equally"
+      ],
+      "enforcement": "automatic",
+      "violations": "warn_and_suggest_fix"
+    },
+    "docker_isolation": {
+      "priority": "high",
+      "description": "All agent execution happens inside Docker containers. Never run agent code directly on the host.",
+      "rules": [
+        "Always use 'uv run harbor run ...' to invoke the agent",
+        "Never execute agent.py or agent-claude.py directly on the host for task runs",
+        "Always rebuild the base image after changing agent.py or pyproject.toml",
+        "Clean jobs/ before each new run to avoid stale results"
+      ],
+      "enforcement": "automatic",
+      "violations": "warn_and_suggest_fix"
+    },
+    "metric_driven_decisions": {
+      "priority": "high",
+      "description": "Keep/discard decisions must be based on the 'passed' metric. Subjective improvements without metric evidence must not be kept.",
+      "rules": [
+        "Keep if 'passed' improved",
+        "Keep if 'passed' is equal and the harness is simpler",
+        "Discard everything else, even if the change seems reasonable",
+        "Always run the full benchmark before deciding to keep or discard",
+        "Record every run in results.tsv regardless of outcome"
+      ],
+      "enforcement": "automatic",
+      "violations": "warn_and_suggest_fix"
+    },
+    "secrets_management": {
+      "priority": "high",
+      "description": "API keys and credentials must never be committed to the repository.",
+      "rules": [
+        "Never commit .env or any file containing API keys",
+        "Never hardcode API keys in agent.py, Dockerfile.base, or pyproject.toml",
+        "Use environment variables or .env (gitignored) for all credentials",
+        "Verify .gitignore includes .env before any commit touching configuration"
+      ],
+      "enforcement": "automatic",
+      "violations": "reject_change"
+    },
+    "model_constraint": {
+      "priority": "medium",
+      "description": "The model must not be changed from the default (gpt-5 in agent.py, haiku in agent-claude.py) without explicit human instruction.",
+      "rules": [
+        "Do not change MODEL without explicit human permission",
+        "If testing a different model, confirm with the human first",
+        "Document model changes in results.tsv with the reason"
+      ],
+      "enforcement": "automatic",
+      "violations": "warn_and_suggest_fix"
+    }
+  },
+
+  "decision_framework": {
+    "new_tool": [
+      "Identify the class of failures the tool addresses",
+      "Verify the tool is general (not task-specific)",
+      "Apply the overfitting test",
+      "Add the tool to create_tools() in the editable section",
+      "Rebuild the base image",
+      "Run the full benchmark",
+      "Record in results.tsv",
+      "Keep if passed improved or harness is simpler at same score"
+    ],
+    "prompt_change": [
+      "Identify which failure pattern the prompt change addresses",
+      "Draft the change to be general, not task-specific",
+      "Rebuild the base image",
+      "Run the full benchmark",
+      "Compare passed count to baseline",
+      "Keep or discard per metric rules"
+    ],
+    "dependency_addition": [
+      "Verify the package is needed for a general tool capability",
+      "Add to pyproject.toml dependencies",
+      "Add to Dockerfile.base if the package needs system-level setup",
+      "Rebuild the base image",
+      "Verify agent imports cleanly: uv run python -c 'from agent import AutoAgent'",
+      "Run baseline before testing the improvement"
+    ],
+    "harness_refactor": [
+      "Confirm the refactor does not touch the FIXED ADAPTER section",
+      "Confirm the refactor preserves single-file layout",
+      "Rebuild and run a sanity check import",
+      "Run the full benchmark",
+      "Keep only if simpler at same score or better"
+    ]
+  }
+}

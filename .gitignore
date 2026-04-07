@@ -21,3 +21,6 @@ tasks-sheets-verified/
 tasks-sheets/
 
 dev/
+
+# Local Claude Code settings (per-developer)
+.claude/settings.local.json

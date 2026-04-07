@@ -1,7 +1,10 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates git && \
+    apt-get install -y --no-install-recommends ca-certificates git curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    npm install -g @anthropic-ai/claude-code && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -12,6 +15,8 @@ RUN uv pip install --system .
 
 # Agent code
 COPY agent.py ./
+
+RUN useradd -m -s /bin/bash agent
 
 RUN ln -sf $(which python3) /usr/local/bin/python
 RUN mkdir -p /logs /app/output

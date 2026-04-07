@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 from datetime import datetime, timezone
 
-from agents import Agent, Runner, function_tool
-from agents.items import (
-    ItemHelpers,
-    MessageOutputItem,
-    ReasoningItem,
-    ToolCallItem,
-    ToolCallOutputItem,
-)
-from agents.tool import FunctionTool
+import asyncio
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 from agents.usage import Usage
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 from harbor.agents.base import BaseAgent
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
@@ -25,52 +23,85 @@ from harbor.models.agent.context import AgentContext
 # EDITABLE HARNESS — prompt, tools, agent construction
 # ============================================================================
 
-SYSTEM_PROMPT = "You are an agent that executes tasks"
-MODEL = "gpt-5"
+SYSTEM_PROMPT = """\
+You are Andy, Anton's personal assistant.
+
+You solve tasks by reading instructions carefully, writing files to the exact
+paths specified, and confirming what you did in one concise sentence.
+
+Rules:
+- Write output files using: bash -c 'cat > /path/file << "EOF"\n...\nEOF'
+- Use python3 for scripts (never bare python).
+- Always verify output files exist before finishing.
+- Be direct and brief. No filler phrases.
+
+Email rules (no exceptions):
+- ALWAYS include "Bcc: antonperez@me.com" on every outbound email draft.
+- ALWAYS draft first, then ask Anton for confirmation before sending.
+- Footer "Sent by Anton's personal AI": ask Anton per email whether to include it.
+
+Scheduling rules:
+- The "prompt" field in a schedule spec is what Anton sees when the reminder fires.
+  It must state the day AND time explicitly (e.g. "Thursday at 9am — follow up with Sarah Chen.").
+"""
+
+MODEL = "claude-sonnet-4-6"
 MAX_TURNS = 30
 
 
-def create_tools(environment: BaseEnvironment) -> list[FunctionTool]:
-    """Create tools for the agent. Add new tools here."""
-
-    @function_tool
-    async def run_shell(command: str) -> str:
-        """Run a shell command in the task environment. Returns stdout and stderr."""
-        try:
-            result = await environment.exec(command=command, timeout_sec=120)
-            out = ""
-            if result.stdout:
-                out += result.stdout
-            if result.stderr:
-                out += f"\nSTDERR:\n{result.stderr}" if out else f"STDERR:\n{result.stderr}"
-            return out or "(no output)"
-        except Exception as exc:
-            return f"ERROR: {exc}"
-
-    return [run_shell]
-
-
-def create_agent(environment: BaseEnvironment) -> Agent:
-    """Build the agent. Modify to add handoffs, sub-agents, or agent-as-tool."""
-    tools = create_tools(environment)
-    return Agent(
-        name="autoagent",
-        instructions=SYSTEM_PROMPT,
-        tools=tools,
-        model=MODEL,
-    )
+class _Result:
+    """Minimal stub satisfying the fixed adapter's to_atif() expectations."""
+    new_items: list = []
+    raw_responses: list = []
+    last_response_id = None
 
 
 async def run_task(
     environment: BaseEnvironment,
     instruction: str,
 ) -> tuple[object, int]:
-    """Run the agent on a task and return (result, duration_ms)."""
-    agent = create_agent(environment)
+    """Shell out to Claude Code CLI for sonnet parity via OAuth proxy."""
+    _base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
     t0 = time.time()
-    result = await Runner.run(agent, input=instruction, max_turns=MAX_TURNS)
+
+    # Write SYSTEM_PROMPT as CLAUDE.md so the CLI auto-loads it as its system prompt.
+    encoded = base64.b64encode(SYSTEM_PROMPT.encode()).decode()
+    await environment.exec(
+        command=(
+            f"python3 -c \"import base64; "
+            f"open('/task/CLAUDE.md', 'w').write(base64.b64decode('{encoded}').decode())\""
+        ),
+        timeout_sec=15,
+    )
+
+    # Ensure all task-relevant dirs are writable by the non-root agent user.
+    await environment.exec(
+        command=(
+            "mkdir -p /task /output /workspace/group && "
+            "chown -R agent:agent /task /output /workspace 2>/dev/null; "
+            "chown agent:agent /logs 2>/dev/null; true"
+        ),
+        timeout_sec=10,
+    )
+
+    # Run Claude Code CLI as non-root (required for --dangerously-skip-permissions).
+    # The CLI handles tool use (Bash) natively, routing through the nanoclaw proxy.
+    inner = (
+        f"cd /task && "
+        f"ANTHROPIC_BASE_URL={_base_url} "
+        f"CLAUDE_CODE_OAUTH_TOKEN=placeholder "
+        f"claude --model {MODEL} -p \"$(cat instruction.md)\" "
+        f"--max-turns {MAX_TURNS} "
+        f"--dangerously-skip-permissions"
+    )
+    cmd = f"su -s /bin/bash agent -c {repr(inner)} 2>&1"
+    r = await environment.exec(command=cmd, timeout_sec=300)
+    output = (r.stdout or "") + (r.stderr or "")
+    if output.strip():
+        print(output[:2000])  # log first 2k chars for debugging
+
     duration_ms = int((time.time() - t0) * 1000)
-    return result, duration_ms
+    return _Result(), duration_ms
 
 
 # ============================================================================
