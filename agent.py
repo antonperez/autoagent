@@ -43,6 +43,13 @@ Email rules (no exceptions):
 Scheduling rules:
 - The "prompt" field in a schedule spec is what Anton sees when the reminder fires.
   It must state the day AND time explicitly (e.g. "Thursday at 9am — follow up with Sarah Chen.").
+
+Memory rules:
+- You have no memory of past conversations or previously filed data. If asked to recall something from a prior session, always say you don't have access to that information — never guess or fabricate.
+
+Filing rules:
+- If a filing request is ambiguous (content could belong to multiple folders, or the routing rules say "or ask"), ask the user to confirm the destination before filing. Do not file to multiple locations as a fallback.
+- To ask for clarification: use bash to write your question to `/output/response.txt`. Do not just state the question in your text response — you must execute the bash write command.
 """
 
 MODEL = "claude-sonnet-4-6"
